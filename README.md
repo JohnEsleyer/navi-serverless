@@ -16,13 +16,44 @@ client L1  →  client inflight  →  batch  →  network  →  CDN  →  L2  �
 Types flow one way, with no schema file and no codegen: a handler's return type
 is inferred through the client, after secret projection.
 
+> **Status: unreleased.** This package is not on npm yet — the name is
+> unclaimed and `0.1.0` is a pre-release. Install from GitHub for now; see
+> [Install](#install). Publishing steps are in [Release](#release).
+
 ## Install
+
+Not on npm yet, so `npm install navi-serverless` does not resolve. Install from
+GitHub in the meantime:
+
+```sh
+# Bun
+bun add github:JohnEsleyer/navi-serverless
+
+# pnpm
+pnpm add github:JohnEsleyer/navi-serverless
+
+# npm
+npm install github:JohnEsleyer/navi-serverless
+```
+
+A GitHub install compiles the package from source via `prepare`, so you get a
+built `dist/` without any extra steps. To work on it directly:
+
+```sh
+git clone https://github.com/JohnEsleyer/navi-serverless.git
+cd navi-serverless
+bun install
+bun run build
+```
+
+Once it is published, this is the whole install:
 
 ```sh
 npm install navi-serverless
 ```
 
-Requires TypeScript 5.x with standard decorators and `erasableSyntaxOnly`:
+The package is ESM-only and ships type declarations. Requires TypeScript 5.x
+with standard decorators and `erasableSyntaxOnly`:
 
 ```jsonc
 {
@@ -113,7 +144,7 @@ class Order {
   total: number;
 
   @Secret
-  cardLast4: string;
+  cardLast4: Secret<string>;
 
   constructor(row: DbOrder) {
     this.id = row.id;
@@ -123,20 +154,36 @@ class Order {
 }
 ```
 
-Three details that will otherwise cost you an afternoon:
+The client type drops `cardLast4` entirely, so `out.cardLast4` is a compile
+error rather than a silent `undefined`:
 
-1. **`@SecretModel` is required.** Decorators run per-field, so the engine
+```ts
+const out = await client.call("getOrder", { id });
+out.total;      // number
+out.cardLast4;   // ✗ Property 'cardLast4' does not exist
+```
+
+Four details that will otherwise cost you an afternoon:
+
+1. **Wrap the type in `Secret<>`, not just the value.** `@Secret` alone strips
+   the field on the wire but leaves it in the type, because a decorator runs at
+   runtime and cannot rewrite the property it decorates — the type checker never
+   learns the field was secret. `Secret<string>` is a branded `string`: it still
+   accepts a plain string, so the annotation is the only cost. Either the brand
+   or a `schema:` (below) is enough on its own.
+2. **`@SecretModel` is required.** Decorators run per-field, so the engine
    cannot know which class a field belongs to until a class decorator claims
    it. A `@Secret` field that no `@SecretModel`, `@SecretFields`, or
    `defineSecretSchema` claims throws `CONFIG_ERROR` at registration time —
    loudly, at boot, rather than silently leaking at runtime.
-2. **Use fields, not constructor parameter properties.** Parameter properties
+3. **Use fields, not constructor parameter properties.** Parameter properties
    (`constructor(readonly x: string)`) compile to constructor assignments, which
    `erasableSyntaxOnly` forbids. Declare the field, then assign it.
-3. **Order does not matter.** The class decorator runs after all field
+4. **Order does not matter.** The class decorator runs after all field
    decorators, so `@Secret` may appear above or below the constructor.
 
-Prefer a plain class? Claim the same fields with a schema:
+Prefer a plain class, or a type you do not control? Claim the same fields with a
+schema, which drives the type instead of the brand:
 
 ```ts
 const OrderSchema = defineSecretSchema<DbOrder>()({ card_last4: "secret" });
@@ -293,6 +340,36 @@ runtimes: `tsconfig.build.json` (edge-only, no ambient types),
 `tsconfig.test.json` (Bun), and `tsconfig.cloudflare.json`
 (`@cloudflare/workers-types`). Mixing Workers globals into the Bun program
 produces conflicting `Request`/`fetch` declarations, so they are kept apart.
+
+## Release
+
+The name `navi-serverless` is unclaimed on npm. To publish:
+
+```sh
+npm login                  # not authenticated on this machine yet
+npm run check              # typecheck, 94 tests, build
+npm publish                # runs `prepare`, then packs dist/ + README.md
+```
+
+`files` limits the tarball to `dist` and `README.md` (46 files, ~83 kB), so
+tests, examples, and configs stay out of the registry.
+
+Notes for the first release:
+
+- **Ship as a prerelease** while the API settles. `npm publish --tag next`
+  installs with `npm i navi-serverless@next` and leaves `@latest` untouched.
+- **`TokenVerifierContext` is a breaking type change** from an earlier
+  two-parameter verifier shape. Worth a `CHANGELOG.md` entry before `0.1.0`.
+- **`prepare` builds from source on install.** Anyone installing from GitHub
+  needs `typescript` available, which npm provides as a devDependency, so this
+  holds for npm and pnpm; a Bun-only install of the git URL also works.
+- **`@SecretModel` is required** wherever `@Secret` is used. A field claimed by
+  nothing throws `CONFIG_ERROR` at registration rather than leaking at runtime.
+- **`Secret<T>` is required for type-level stripping.** A bare `@Secret` on a
+  `string` field still strips on the wire but stayed in the public type, so
+  `out.apiKey` type-checked and read `undefined`. That was a bug, not a
+  limitation, and it is fixed; the annotation is new, so call it out in the
+  changelog if you published before this.
 
 ## License
 

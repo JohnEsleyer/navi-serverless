@@ -227,6 +227,12 @@ export class NaviClient<App = unknown> {
    * Invoke an action. The resolved type is the *public* projection of the
    * handler's output: secret fields are not only stripped at runtime, they are
    * absent from the type.
+   *
+   * A field is secret in the type when it is branded `Secret<T>` (what
+   * `@Secret` asks you to write) or named in a `schema:` passed to
+   * `registerAction`. A bare `@Secret` on a `string` field still strips on the
+   * wire, but the type cannot know — decorators run at runtime and cannot
+   * rewrite the property — so the field stays visible to the type checker.
    */
   call<K extends ActionName<RegistryOf<App>>>(
     action: K,

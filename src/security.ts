@@ -246,10 +246,19 @@ export interface SecretSchema<T, Sp extends SecretSchemaSpec<T> = SecretSchemaSp
   readonly keys: ReadonlySet<keyof T>;
 }
 
-/** Structural view used for inference, free of the model-type phantom. */
+/**
+ * Structural view used for inference, free of the model-type phantom.
+ *
+ * `keys` is `ReadonlySet<PropertyKey>` rather than `ReadonlySet<never>` so that
+ * a real `SecretSchema<T, Sp>` actually satisfies this marker. Widening the set
+ * to `never` made the marker unsatisfiable, so `PublicOutput`'s first branch
+ * never matched and every `defineSecretSchema` result silently degraded to the
+ * brand-only projection. The `spec` property is what `infer Sp` reads; `keys` is
+ * only here to keep the two shapes related.
+ */
 export interface SecretSchemaMarker<Sp> {
   readonly spec: Sp;
-  readonly keys: ReadonlySet<never>;
+  readonly keys: ReadonlySet<PropertyKey>;
 }
 
 export function defineSecretSchema<T>(): <const S extends SecretSchemaSpec<T>>(
@@ -277,9 +286,35 @@ type Primitive = string | number | boolean | bigint | symbol | null | undefined;
 export type IsSecret<T> = T extends SecretBox<unknown> ? true : false;
 
 /**
- * The type a client is allowed to observe. Secret boxes vanish, declared
- * secret keys are removed, methods are dropped (they cannot cross the wire),
- * and everything else is walked structurally.
+ * Phantom brand carried by a `@Secret` field's *declared type*.
+ *
+ * `@Secret` runs at runtime, so it can strip the value on the wire but it
+ * cannot change the field's type — a field decorator has no way to rewrite the
+ * property it decorates. Without a brand in the type, `Public<T>` had no way to
+ * know which keys were secret, and the public projection kept them: the client
+ * type said `out.apiKey` existed while the server never sent it. That is the
+ * worst kind of bug, because it type-checks and then reads `undefined`.
+ *
+ * The brand property is optional, so `Secret<string>` still accepts a plain
+ * string and the ergonomics cost is the annotation alone.
+ */
+export const SECRET_FIELD: unique symbol = Symbol.for("navi.secret.field");
+
+/** Marks a value as secret for the type-level projection. See {@link SECRET_FIELD}. */
+export type Secret<V> = V & { readonly [SECRET_FIELD]?: true };
+
+/** `true` when `T` carries the {@link SECRET_FIELD} brand. */
+export type IsSecretField<T> = typeof SECRET_FIELD extends keyof T ? true : false;
+
+/**
+ * The type a client is allowed to observe. Secret boxes vanish, branded
+ * (`Secret<...>`) and declared (`S`) secret keys are removed, methods are
+ * dropped (they cannot cross the wire), and everything else is walked
+ * structurally.
+ *
+ * Both routes to secrecy are honoured: a `Secret<V>` brand, which is what
+ * `@Secret` asks for, and an explicit key list, which is what
+ * `defineSecretSchema` produces. Either one is enough on its own.
  */
 export type Public<T, S extends PropertyKey = never> = T extends SecretBox<unknown>
   ? never
@@ -297,20 +332,30 @@ export type Public<T, S extends PropertyKey = never> = T extends SecretBox<unkno
               ? ArrayBuffer
               : T extends object
                 ? {
-                    readonly [K in keyof T as K extends S ? never : K]: T[K] extends (...args: never[]) => unknown
+                    readonly [K in keyof T as K extends S
                       ? never
-                      : Public<T[K]>;
+                      : IsSecretField<T[K]> extends true
+                        ? never
+                        : K]: T[K] extends (...args: never[]) => unknown
+                          ? never
+                          : Public<T[K]>;
                   }
                 : T;
 
-/** Schema-aware variant: honors nested `SecretSchemaSpec` records. */
+/** Schema-aware variant: honors nested `SecretSchemaSpec` records and brands. */
 export type PublicBySchema<T, S> = T extends Primitive
   ? T
   : T extends ReadonlyArray<infer E>
     ? ReadonlyArray<S extends object ? PublicBySchema<E, S> : Public<E>>
     : T extends object
       ? {
-          readonly [K in keyof T as K extends keyof S ? (S[K] extends "secret" ? never : K) : K]: K extends keyof S
+          readonly [K in keyof T as K extends keyof S
+            ? S[K] extends "secret"
+              ? never
+              : K
+            : IsSecretField<T[K]> extends true
+              ? never
+              : K]: K extends keyof S
             ? S[K] extends "public" | "secret"
               ? T[K]
               : S[K] extends object

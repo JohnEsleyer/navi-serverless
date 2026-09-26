@@ -21,10 +21,10 @@ class Product {
   price: number;
 
   @Secret
-  wholesaleCost: number;
+  wholesaleCost: Secret<number>;
 
   @Secret
-  dbChecksum: string;
+  dbChecksum: Secret<string>;
 
   constructor(id: string, name: string, price: number, cost: number, checksum: string) {
     this.id = id;

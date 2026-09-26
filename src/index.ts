@@ -30,6 +30,7 @@ export {
 } from "./cache.js";
 
 export {
+  SECRET_FIELD,
   SECRET_SYMBOL,
   Secret,
   SecretFields,
@@ -45,6 +46,7 @@ export {
   unwrapSecret,
   type DirectSecretKeys,
   type IsSecret,
+  type IsSecretField,
   type ProjectOptions,
   type ProjectionResult,
   type Public,

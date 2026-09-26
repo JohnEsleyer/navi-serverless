@@ -1,6 +1,14 @@
 {
   "name": "navi-serverless",
   "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JohnEsleyer/navi-serverless.git"
+  },
+  "homepage": "https://github.com/JohnEsleyer/navi-serverless#readme",
+  "bugs": {
+    "url": "https://github.com/JohnEsleyer/navi-serverless/issues"
+  },
   "description": "Opinionated, strictly TypeScript edge framework for V8 runtimes (Cloudflare Workers, Vercel Edge, Deno, Bun) engineered to drive paid function invocations toward zero.",
   "type": "module",
   "license": "MIT",
@@ -40,9 +48,11 @@
   },
   "types": "./dist/index.d.ts",
   "module": "./dist/index.js",
+  "main": "./dist/index.js",
   "scripts": {
     "dev": "bun run examples/dev.ts",
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepare": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.cloudflare.json --noEmit",
     "test": "bun test",
     "demo": "bun run examples/local-bun.ts",
