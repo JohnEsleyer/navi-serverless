@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["bun"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "examples/local-bun.ts", "examples/vercel-edge.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "examples/local-bun.ts", "examples/vercel-edge.ts", "examples/dev.ts"]
 }
