@@ -6,3 +6,6 @@ dist/
 .DS_Store
 bun.lockb
 coverage/
+
+# textify: the config is shared, the generated context dump is not
+/codebase.txt
