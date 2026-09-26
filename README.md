@@ -341,6 +341,49 @@ runtimes: `tsconfig.build.json` (edge-only, no ambient types),
 (`@cloudflare/workers-types`). Mixing Workers globals into the Bun program
 produces conflicting `Request`/`fetch` declarations, so they are kept apart.
 
+## Development
+
+```sh
+bun install
+bun run dev
+```
+
+That starts a headless API server — no UI, nothing spawns a browser — and
+registers four actions (`getStats`, `recordVisit`, `increment`, `reset`) so the
+caching and batching layers have something to act on. `PORT` overrides 3000.
+
+`GET /` returns JSON describing the surface; the RPC routes are the four the
+engine already exposes:
+
+```sh
+curl -s localhost:3000/_navi/health | jq
+curl -s localhost:3000/_navi/a/getStats | jq          # cached GET transport
+curl -s localhost:3000/_navi/manifest | jq
+
+curl -s localhost:3000/_navi/action -H 'Content-Type: application/json' \
+  -d '{"action":"increment","payload":{"amount":5}}' | jq
+
+# Batch: entries collapse through singleflight, so a repeated action is invoked once
+curl -s localhost:3000/_navi/action -H 'Content-Type: application/json' \
+  -d '{"_batch":[{"id":"1","action":"getStats"},{"id":"2","action":"getStats"}]}' | jq
+```
+
+Every request is logged with the tier that answered it, so the caching layers
+are visible while you work:
+
+```
+20:16:08 PM  POST /_navi/action     200    7.7ms tier:NONE,SINGLEFLIGHT [AVOIDED]
+20:16:08 PM  GET  /_navi/a/getStats  200    0.3ms tier:L1-HEAP        [AVOIDED]
+```
+
+`[AVOIDED]` means the response was served without invoking the handler — the
+number that matters. The tier is read from the response envelope, not a header:
+a single action reports `_meta.cacheHit`, a batch reports one `cacheHit` per
+entry in `results`.
+
+Other scripts: `bun run check` (typecheck, tests, build), `bun test`,
+`bun run demo`, `bun run build`.
+
 ## Release
 
 The name `navi-serverless` is unclaimed on npm. To publish:
